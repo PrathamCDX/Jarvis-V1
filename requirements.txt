@@ -1,0 +1,7 @@
+mcp
+
+google-genai 
+google
+python-dotenv
+logging
+dataclasses
