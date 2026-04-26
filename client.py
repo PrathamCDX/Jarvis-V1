@@ -1,3 +1,4 @@
+import time
 import os
 import asyncio
 from google import genai
@@ -32,6 +33,7 @@ tools = []
 function_history = []
 text_history = []
 all_mcp_tools = []
+session_dict = {}
 
 
 async def connect_all_servers(stack: AsyncExitStack, server_list: list[str]):
@@ -47,6 +49,7 @@ async def connect_all_servers(stack: AsyncExitStack, server_list: list[str]):
         
         # 2. Initialize Session
         session = await stack.enter_async_context(ClientSession(read, write))
+        session_dict[server] = session
         await session.initialize()
 
         mcp_tools = await session.list_tools()
@@ -59,6 +62,8 @@ async def connect_all_servers(stack: AsyncExitStack, server_list: list[str]):
 
 async def main():
     async with AsyncExitStack() as stack:
+        token_count = 0
+
         # 1. Connect to MCP Server
         # stdio_transport = await stack.enter_async_context(stdio_client(server_params))
         # read, write = stdio_transport
@@ -97,8 +102,6 @@ async def main():
                 config=types.GenerateContentConfig(tools=all_mcp_tools) 
             )
 
-            logger.info(response)
-
 
             if ( response and response.candidates ):
                 candidate_list = response.candidates
@@ -112,13 +115,21 @@ async def main():
                             if hasattr(part, 'text') and part.text:
                                 text_history.append(part.text)
                             elif hasattr(part, 'function_call') and part.function_call:
-                                function_history.append({
+                                server_name = tools_dict[part.function_call.name]
+                                current_function_data = {
                                     "id": len(function_history) ,
-                                    "function_server": tools_dict[part.function_call.name],
+                                    "function_server": server_name,
                                     "function_name": part.function_call.name,
                                     "function_args": part.function_call.args, 
-                                    "function_res": {}
-                                })
+                                    "function_response": {}
+                                }
+                                function_response = await session_dict[server_name].call_tool(
+                                    current_function_data['function_name'],
+                                    current_function_data['function_args']
+                                )
+
+                                current_function_data['function_response'] = function_response.content[0].text 
+                                function_history.append(current_function_data)
                             else:
                                 print('random')
                                 
@@ -126,9 +137,16 @@ async def main():
                 print('No gemini parts')
 
             # print('Current function stack for ' , count , ' is ', function_history )
+            start_time = time.perf_counter()
+
+            token_count += int(response.usage_metadata.total_token_count)
             logger.info(text_history)
             logger.info(function_history)
             # print(f"Gemini: {response}")
+            end_time = time.perf_counter()
+            print(f"Total tokens used : {token_count}")
+            logger.info(f"Execution time: {end_time - start_time:.4f} seconds")
+
 
 if __name__ == "__main__":
     # Fixed the run call

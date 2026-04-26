@@ -27,7 +27,7 @@ def init_tables():
         conn.close()
 
 @mcp.tool(description="Create a new todo with the given title and optional description")
-def create_todo(title: str, description: str = '') -> str:
+def create_todo(title: str, description: str = '') -> dict:
     conn = get_db()
     try:
         cursor = conn.execute(
@@ -35,44 +35,41 @@ def create_todo(title: str, description: str = '') -> str:
             (title, description, 0)
         )
         conn.commit()
-        return f'Todo created with id {cursor.lastrowid}'
+        return {"id": cursor.lastrowid, "title": title, "description": description, "completed": False}
     finally:
         conn.close()
 
 @mcp.tool(description="Get a todo by its ID")
-def get_todo(id: int) -> str:
+def get_todo(id: int) -> dict:
     conn = get_db()
     try:
         cursor = conn.execute('SELECT * FROM todos WHERE id = ?', (id,))
         row = cursor.fetchone()
         if row:
-            return f"ID: {row['id']}, Title: {row['title']}, Description: {row['description']}, Completed: {bool(row['completed'])}"
-        return f'Todo with id {id} not found'
+            return {"id": row["id"], "title": row["title"], "description": row["description"], "completed": bool(row["completed"])}
+        return {"error": f"Todo with id {id} not found"}
     finally:
         conn.close()
 
 @mcp.tool(description="List all todos in the database", )
-def list_todos() -> str:
+def list_todos() -> list:
     conn = get_db()
     try:
         cursor = conn.execute('SELECT * FROM todos')
         rows = cursor.fetchall()
         if not rows:
-            return 'No todos found'
-        return '\n'.join(
-            f"ID: {r['id']}, Title: {r['title']}, Description: {r['description']}, Completed: {bool(r['completed'])}"
-            for r in rows
-        )
+            return []
+        return [{"id": r["id"], "title": r["title"], "description": r["description"], "completed": bool(r["completed"])} for r in rows]
     finally:
         conn.close()
 
 @mcp.tool(description="Update a todo's title, description, or completed status by ID")
-def update_todo(id: int, title: Optional[str] = None, description: Optional[str] = None, completed: Optional[bool] = None) -> str:
+def update_todo(id: int, title: Optional[str] = None, description: Optional[str] = None, completed: Optional[bool] = None) -> dict:
     conn = get_db()
     try:
         cursor = conn.execute('SELECT * FROM todos WHERE id = ?', (id,))
         if not cursor.fetchone():
-            return f'Todo with id {id} not found'
+            return {"error": f"Todo with id {id} not found"}
         
         updates = []
         values = []
@@ -90,19 +87,22 @@ def update_todo(id: int, title: Optional[str] = None, description: Optional[str]
             values.append(id)
             conn.execute(f"UPDATE todos SET {', '.join(updates)} WHERE id = ?", values)
             conn.commit()
-        return f'Todo {id} updated'
+        
+        cursor = conn.execute('SELECT * FROM todos WHERE id = ?', (id,))
+        row = cursor.fetchone()
+        return {"id": row["id"], "title": row["title"], "description": row["description"], "completed": bool(row["completed"])}
     finally:
         conn.close()
 
 @mcp.tool(description="Delete a todo by its ID")
-def delete_todo(id: int) -> str:
+def delete_todo(id: int) -> dict:
     conn = get_db()
     try:
         cursor = conn.execute('DELETE FROM todos WHERE id = ?', (id,))
         conn.commit()
         if cursor.rowcount > 0:
-            return f'Todo {id} deleted'
-        return f'Todo with id {id} not found'
+            return {"success": True, "id": id}
+        return {"error": f"Todo with id {id} not found"}
     finally:
         conn.close()
 
