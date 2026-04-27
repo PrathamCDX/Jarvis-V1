@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from logging_system import logger
 from config import server_names
 from token_count import add_token
+import random
 # from functionHistoryClass import FunctionHistoryType
 
 
@@ -27,6 +28,9 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 SYSTEM_PROMT = """
 You are a personal assistant.
 You will be given task or tasks. 
+Each task will have a unique prompt id.
+Validate the unique id with the history of function calls to check 
+if the corresponding task has already called the function with proper args
 You can break down the given task into smaller subtasts each with a function call if necessary. 
 If it can be completed in a single function call not need to break it down in further sub tasks. 
 The task is :  
@@ -75,6 +79,7 @@ async def main():
         count = 0 
         while True:
             prompt = input("\nYou: ").strip()
+            prompt_unique_id = time.time_ns() + random.randint(1637, 98479)
             if prompt.lower() == 'exit': break
 
             # This call will fail if 'session' is passed directly as a tool
@@ -83,7 +88,7 @@ async def main():
                 model="gemma-4-26b-a4b-it",
                 contents=[
                     types.Content(role="User", parts = [
-                        types.Part.from_text(text=SYSTEM_PROMT + prompt),
+                        types.Part.from_text(text=SYSTEM_PROMT + f' . prompt_unique_id = {prompt_unique_id} . '+ prompt),
                         types.Part.from_text(text= ' . Previous function calls in order : ' + str(function_history))
                     ])
                 ],
@@ -111,6 +116,7 @@ async def main():
                                     server_name = tools_dict[part.function_call.name]
                                     current_function_data = {
                                         "id": len(function_history) ,
+                                        "promt_id": prompt_unique_id,
                                         "function_server": server_name,
                                         "function_name": part.function_call.name,
                                         "function_args": part.function_call.args, 
@@ -128,7 +134,7 @@ async def main():
                                         model="gemma-4-26b-a4b-it",
                                         contents=[
                                             types.Content(role="User", parts = [
-                                                types.Part.from_text(text= prompt),
+                                                types.Part.from_text(text= prompt + f' . prompt_unique_id = {prompt_unique_id} . '),
                                                 types.Part.from_text(text= ' . All Previous function calls in order : ' + str(function_history))
                                             ])
                                         ],
