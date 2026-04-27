@@ -75,6 +75,57 @@ def list_todos() -> list:
         return res
     finally:
         conn.close()
+
+@mcp.tool(description="List all completed todos in the database")
+def list_completed_todos() -> list:
+    conn = get_db()
+    try:
+        cursor = conn.execute('SELECT id, title, description, completed FROM todos WHERE completed = 1')
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return []
+            
+        res = []
+        for row in rows:
+            # 2. Use string keys and append to the list
+            new_data = {
+                'id': row['id'], 
+                'title': row['title'],
+                'description': row['description'],
+                'completed': bool(row['completed']) # Converts 0/1 to True/False
+            }
+            res.append(new_data)
+        # logger.info(res)
+        return res
+    finally:
+        conn.close()
+
+@mcp.tool(description="List all uncompleted todos in the database")
+def list_uncompleted_todos() -> list:
+    conn = get_db()
+    try:
+        cursor = conn.execute('SELECT id, title, description, completed FROM todos WHERE completed = 0')
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return []
+            
+        res = []
+        for row in rows:
+            # 2. Use string keys and append to the list
+            new_data = {
+                'id': row['id'], 
+                'title': row['title'],
+                'description': row['description'],
+                'completed': bool(row['completed']) # Converts 0/1 to True/False
+            }
+            res.append(new_data)
+        # logger.info(res)
+        return res
+    finally:
+        conn.close()
+
 @mcp.tool(description="Update a todo's title, description, or completed status by ID")
 def update_todo(id: int, title: Optional[str] = None, description: Optional[str] = None, completed: Optional[bool] = None) -> dict:
     conn = get_db()
