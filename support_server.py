@@ -1,5 +1,5 @@
 from mcp.server.fastmcp import FastMCP
-
+from logging_system import logger
 mcp = FastMCP("support_server")
 
 @mcp.tool(description = """
@@ -25,11 +25,6 @@ def query_string_builder(query: str, args: list[str]) -> str:
             i += 1
             
     return res
-
-@mcp.tool(description="Ask user for any clarifications or further details on a task")
-def ask_user(query: str) -> str:
-    user_response = input(query)
-    return user_response
 
 if __name__ == '__main__':
     mcp.run(transport="stdio")

@@ -5,6 +5,7 @@ from datetime import date
 today = date.today()
 # 1. Create a custom logger
 logger = logging.getLogger("clientLogger")
+logger.propagate = False
 logger.setLevel(logging.DEBUG)  # Capture everything
 
 # 2. Create handlers

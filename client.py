@@ -9,6 +9,7 @@ from contextlib import AsyncExitStack
 from dotenv import load_dotenv
 from logging_system import logger
 from config import server_names
+from token_count import add_token
 # from functionHistoryClass import FunctionHistoryType
 
 
@@ -25,7 +26,10 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 
 SYSTEM_PROMT = """
 You are a personal assistant.
-break down the given task into smaller subtasts each with a function call. the task is :  
+You will be given task or tasks. 
+You can break down the given task into smaller subtasts each with a function call if necessary. 
+If it can be completed in a single function call not need to break it down in further sub tasks. 
+The task is :  
 """
 
 tools_dict = {}
@@ -64,22 +68,6 @@ async def main():
     async with AsyncExitStack() as stack:
         token_count = 0
 
-        # 1. Connect to MCP Server
-        # stdio_transport = await stack.enter_async_context(stdio_client(server_params))
-        # read, write = stdio_transport
-        
-        # # 2. Initialize Session
-        # session = await stack.enter_async_context(ClientSession(read, write))
-        # await session.initialize()
-
-        # # 3. Get tools from MCP and format for Gemini
-        # mcp_tools = await session.list_tools()
-        # tools = []
-        
-        # for tool in mcp_tools.tools:
-        #     tools_dict[tool.name] = 'todo_server.py'
-        #     tools.append(tool.name)
-
         await connect_all_servers(stack, server_list=server_names)
         
         
@@ -96,58 +84,80 @@ async def main():
                 contents=[
                     types.Content(role="User", parts = [
                         types.Part.from_text(text=SYSTEM_PROMT + prompt),
-                        types.Part.from_text(text= 'Previous function calls in order : ' + str(function_history))
+                        types.Part.from_text(text= ' . Previous function calls in order : ' + str(function_history))
                     ])
                 ],
                 config=types.GenerateContentConfig(tools=all_mcp_tools) 
             )
 
+            logger.info(response)
 
-            if ( response and response.candidates ):
-                candidate_list = response.candidates
-                # gemini_parts = response.candidates.content.parts
-                # print('Gemini parts', candidate_list)
-                for candidate in candidate_list:
-                    if (candidate.content and candidate.content.parts):
-                        gemini_parts = candidate.content.parts
-                        # print('gemini_parts : ', gemini_parts)
-                        for part in gemini_parts:
-                            if hasattr(part, 'text') and part.text:
-                                text_history.append(part.text)
-                            elif hasattr(part, 'function_call') and part.function_call:
-                                server_name = tools_dict[part.function_call.name]
-                                current_function_data = {
-                                    "id": len(function_history) ,
-                                    "function_server": server_name,
-                                    "function_name": part.function_call.name,
-                                    "function_args": part.function_call.args, 
-                                    "function_response": {}
-                                }
-                                function_response = await session_dict[server_name].call_tool(
-                                    current_function_data['function_name'],
-                                    current_function_data['function_args']
-                                )
+            chaining = 1
+            has_function_call = True
 
-                                current_function_data['function_response'] = function_response.content[0].text 
-                                function_history.append(current_function_data)
-                            else:
-                                print('random')
-                                
-            else:
-                print('No gemini parts')
+            while has_function_call :
+                if ( response and response.candidates ):
+                    candidate_list = response.candidates
+                    for candidate in candidate_list:
+                        if (candidate.content and candidate.content.parts):
+                            gemini_parts = candidate.content.parts
+                            for part in gemini_parts:
+                                has_function_call = False
+                                if hasattr(part, 'text') and part.text:
+                                    text_history.append(part.text)
+                                    continue
+                                elif hasattr(part, 'function_call') and part.function_call:
+                                    has_function_call = True
+                                    server_name = tools_dict[part.function_call.name]
+                                    current_function_data = {
+                                        "id": len(function_history) ,
+                                        "function_server": server_name,
+                                        "function_name": part.function_call.name,
+                                        "function_args": part.function_call.args, 
+                                        "function_response": {}
+                                    }
+                                    function_response = await session_dict[server_name].call_tool(
+                                        current_function_data['function_name'],
+                                        current_function_data['function_args']
+                                    )
 
-            # print('Current function stack for ' , count , ' is ', function_history )
+                                    current_function_data['function_response'] = function_response.content 
+                                    function_history.append(current_function_data)
+
+                                    response = client.models.generate_content(
+                                        model="gemma-4-26b-a4b-it",
+                                        contents=[
+                                            types.Content(role="User", parts = [
+                                                types.Part.from_text(text= prompt),
+                                                types.Part.from_text(text= ' . All Previous function calls in order : ' + str(function_history))
+                                            ])
+                                        ],
+                                        config=types.GenerateContentConfig(tools=all_mcp_tools) 
+                                    )
+                                    add_token(int(response.usage_metadata.total_token_count))
+                                    logger.info(response)
+                                    chaining += 1 
+                                    print(f"chaining : {chaining}")
+                                    continue
+                                else:
+                                    print('random')
+                                    
+                else:
+                    print('No gemini parts')
+
+
+            
+
             start_time = time.perf_counter()
 
             token_count += int(response.usage_metadata.total_token_count)
             logger.info(text_history)
             logger.info(function_history)
-            # print(f"Gemini: {response}")
             end_time = time.perf_counter()
-            print(f"Total tokens used : {token_count}")
-            logger.info(f"Execution time: {end_time - start_time:.4f} seconds")
+            print('Response :' , text_history[ len(text_history) - 1 ])
+            add_token(int(response.usage_metadata.total_token_count))
+            logger.info(f"Execution time: {end_time - start_time:.8f} seconds")
 
 
 if __name__ == "__main__":
-    # Fixed the run call
     asyncio.run(main())

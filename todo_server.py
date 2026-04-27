@@ -1,7 +1,7 @@
 import sqlite3
 from typing import Optional
 from mcp.server.fastmcp import FastMCP
-
+from logging_system import logger
 DB_PATH = 'todo.db'
 
 mcp = FastMCP('todo_server')
@@ -51,18 +51,30 @@ def get_todo(id: int) -> dict:
     finally:
         conn.close()
 
-@mcp.tool(description="List all todos in the database", )
+@mcp.tool(description="List all todos in the database")
 def list_todos() -> list:
     conn = get_db()
     try:
-        cursor = conn.execute('SELECT * FROM todos')
+        cursor = conn.execute('SELECT id, title, description, completed FROM todos')
         rows = cursor.fetchall()
+        
         if not rows:
             return []
-        return [{"id": r["id"], "title": r["title"], "description": r["description"], "completed": bool(r["completed"])} for r in rows]
+            
+        res = []
+        for row in rows:
+            # 2. Use string keys and append to the list
+            new_data = {
+                'id': row['id'], 
+                'title': row['title'],
+                'description': row['description'],
+                'completed': bool(row['completed']) # Converts 0/1 to True/False
+            }
+            res.append(new_data)
+        # logger.info(res)
+        return res
     finally:
         conn.close()
-
 @mcp.tool(description="Update a todo's title, description, or completed status by ID")
 def update_todo(id: int, title: Optional[str] = None, description: Optional[str] = None, completed: Optional[bool] = None) -> dict:
     conn = get_db()
