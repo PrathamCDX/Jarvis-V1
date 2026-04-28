@@ -1,1 +1,1 @@
-server_names = [ 'calculator_server.py', 'todo_server.py', 'support_server.py']
+server_names = [ 'calculator_server.py', 'todo_server.py', 'support_server.py', 'token_count.py']
