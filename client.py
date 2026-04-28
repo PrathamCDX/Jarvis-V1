@@ -46,12 +46,13 @@ connected_servers = 0
 global_async_stack = AsyncExitStack()
 
 
-async def connect_all_servers(server_list: list[str]):
-    global connected_servers
+async def connect_all_servers(server_list: list[str], connected_servers: int):
+    
     print("connected servers start : ", connected_servers)
-    if connected_servers > 0 :
-        return None
+    # if connected_servers > 0 :
+    #     return None
     for server in server_list:
+        print(server)
         server_params = StdioServerParameters(
             command='python',
             # args=['todo_server.py']
@@ -86,7 +87,7 @@ async def run_agent_v2(query: str):
     chaining = 0
         
     # Connect to your MCP servers
-    await connect_all_servers( server_list=server_names)
+    # await connect_all_servers( server_list=server_names)
         
     prompt_unique_id = time.time_ns() + random.randint(1637, 98479)
         
@@ -96,7 +97,7 @@ async def run_agent_v2(query: str):
         model="gemma-4-26b-a4b-it",
         contents=[
             types.Content(role="user", parts=[
-                types.Part.from_text(text=f" {SYSTEM_PROMT} prompt_unique_id = {prompt_unique_id} {query} "),
+                types.Part.from_text(text=f" {SYSTEM_PROMT} prompt_unique_id = {prompt_unique_id}, task: {query} "),
                 types.Part.from_text(text=f" . Previous function calls: {function_history} ")
             ])
         ],
