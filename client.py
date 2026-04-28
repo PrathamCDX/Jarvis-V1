@@ -42,9 +42,15 @@ function_history = []
 text_history = []
 all_mcp_tools = []
 session_dict = {}
+connected_servers = 0
+global_async_stack = AsyncExitStack()
 
 
-async def connect_all_servers(stack: AsyncExitStack, server_list: list[str]):
+async def connect_all_servers(server_list: list[str]):
+    global connected_servers
+    print("connected servers start : ", connected_servers)
+    if connected_servers > 0 :
+        return None
     for server in server_list:
         server_params = StdioServerParameters(
             command='python',
@@ -52,11 +58,11 @@ async def connect_all_servers(stack: AsyncExitStack, server_list: list[str]):
             args = [server] 
         )
 
-        stdio_transport = await stack.enter_async_context(stdio_client(server_params))
+        stdio_transport = await global_async_stack.enter_async_context(stdio_client(server_params))
         read, write = stdio_transport
         
         # 2. Initialize Session
-        session = await stack.enter_async_context(ClientSession(read, write))
+        session = await global_async_stack.enter_async_context(ClientSession(read, write))
         session_dict[server] = session
         await session.initialize()
 
@@ -66,6 +72,192 @@ async def connect_all_servers(stack: AsyncExitStack, server_list: list[str]):
             tools_dict[tool.name] = server
             all_mcp_tools.append(tool)
             tools.append(tool.name)
+        
+        connected_servers += 1 
+    print(f"connected_servers : {connected_servers}")
+
+
+async def run_agent_v2(query: str):
+    
+    print('Running agent v2')
+    global function_history 
+    text_history = []
+    max_chaining = 50
+    chaining = 0
+        
+    # Connect to your MCP servers
+    await connect_all_servers( server_list=server_names)
+        
+    prompt_unique_id = time.time_ns() + random.randint(1637, 98479)
+        
+    # 2. Initial Model Call
+    # We wrap the core logic in a way that handles the first call and tool loops
+    response = client.models.generate_content(
+        model="gemma-4-26b-a4b-it",
+        contents=[
+            types.Content(role="user", parts=[
+                types.Part.from_text(text=f" {SYSTEM_PROMT} prompt_unique_id = {prompt_unique_id} {query} "),
+                types.Part.from_text(text=f" . Previous function calls: {function_history} ")
+            ])
+        ],
+        config=types.GenerateContentConfig(tools=all_mcp_tools)
+    )
+
+    # 3. The Chaining Loop
+    # We loop as long as the model wants to call tools
+    while chaining < max_chaining:
+        if not response.candidates:
+            break
+
+        tool_called_this_turn = False
+            
+        # Extract parts from the first candidate
+        parts = response.candidates[0].content.parts
+        
+        for part in parts:
+            # Handle Text Responses
+            if hasattr(part, 'text') and part.text:
+                text_history.append(part.text)
+            
+            # Handle Tool/Function Calls
+            elif hasattr(part, 'function_call') and part.function_call:
+                tool_called_this_turn = True
+                fn_name = part.function_call.name
+                fn_args = part.function_call.args
+                server_name = tools_dict[fn_name]
+
+                # Execute the tool
+                function_response = await session_dict[server_name].call_tool(fn_name, fn_args)
+
+                # Update history
+                current_function_data = {
+                    "id": len(function_history),
+                    "promt_id": prompt_unique_id,
+                    "function_server": server_name,
+                    "function_name": fn_name,
+                    "function_args": fn_args, 
+                    "function_response": function_response.content 
+                }
+                function_history.append(current_function_data)
+
+        # 4. If tools were called, feed results back to Gemini
+        if tool_called_this_turn:
+            chaining += 1
+            response = client.models.generate_content(
+                model="gemma-4-26b-a4b-it",
+                contents=[
+                    types.Content(role="user", parts=[
+                        types.Part.from_text(text=f" {query} prompt_unique_id = {prompt_unique_id} "),
+                        types.Part.from_text(text=f". All Previous function calls: {function_history} ")
+                    ])
+                ],
+                config=types.GenerateContentConfig(tools=all_mcp_tools)
+            )
+            # Global token tracking (assuming add_token is defined globally)
+            add_token(int(response.usage_metadata.total_token_count))
+        else:
+            # No more tools called; we are done
+            break
+    
+    return text_history[-1] if text_history else "No response generated."
+
+async def run_agent(query: str):
+    async with AsyncExitStack() as stack:
+        token_count = 0
+        max_chaining = 50
+
+        await connect_all_servers(stack, server_list=server_names)
+        
+        
+        print("Ready! (Note: Manual tool-call handling is required for production)", tools)
+        count = 0 
+        while True:
+            prompt = query.strip()
+            prompt_unique_id = time.time_ns() + random.randint(1637, 98479)
+            if prompt.lower() == 'exit': break
+
+            # This call will fail if 'session' is passed directly as a tool
+            # You must pass Gemini-compatible function declarations.
+            response = client.models.generate_content(
+                model="gemma-4-26b-a4b-it",
+                contents=[
+                    types.Content(role="User", parts = [
+                        types.Part.from_text(text=SYSTEM_PROMT + f' . prompt_unique_id = {prompt_unique_id} . '+ prompt),
+                        types.Part.from_text(text= ' . Previous function calls in order : ' + str(function_history))
+                    ])
+                ],
+                config=types.GenerateContentConfig(tools=all_mcp_tools) 
+            )
+
+            logger.info(response)
+
+            chaining = 1
+            has_function_call = True
+
+            while has_function_call and chaining < max_chaining:
+                if ( response and response.candidates ):
+                    candidate_list = response.candidates
+                    for candidate in candidate_list:
+                        if (candidate.content and candidate.content.parts):
+                            gemini_parts = candidate.content.parts
+                            for part in gemini_parts:
+                                has_function_call = False
+                                if hasattr(part, 'text') and part.text:
+                                    text_history.append(part.text)
+                                    continue
+                                elif hasattr(part, 'function_call') and part.function_call:
+                                    has_function_call = True
+                                    server_name = tools_dict[part.function_call.name]
+                                    current_function_data = {
+                                        "id": len(function_history) ,
+                                        "promt_id": prompt_unique_id,
+                                        "function_server": server_name,
+                                        "function_name": part.function_call.name,
+                                        "function_args": part.function_call.args, 
+                                        "function_response": {}
+                                    }
+                                    function_response = await session_dict[server_name].call_tool(
+                                        current_function_data['function_name'],
+                                        current_function_data['function_args']
+                                    )
+
+                                    current_function_data['function_response'] = function_response.content 
+                                    function_history.append(current_function_data)
+
+                                    response = client.models.generate_content(
+                                        model="gemma-4-26b-a4b-it",
+                                        contents=[
+                                            types.Content(role="User", parts = [
+                                                types.Part.from_text(text= prompt + f' . prompt_unique_id = {prompt_unique_id} . '),
+                                                types.Part.from_text(text= ' . All Previous function calls in order : ' + str(function_history))
+                                            ])
+                                        ],
+                                        config=types.GenerateContentConfig(tools=all_mcp_tools) 
+                                    )
+                                    add_token(int(response.usage_metadata.total_token_count))
+                                    logger.info(response)
+                                    chaining += 1 
+                                    print(f"chaining : {chaining}")
+                                    continue
+                                else:
+                                    print('random')
+                                    
+                else:
+                    print('No gemini parts')
+
+
+            
+
+            start_time = time.perf_counter()
+
+            token_count += int(response.usage_metadata.total_token_count)
+            logger.info(text_history)
+            logger.info(function_history)
+            end_time = time.perf_counter()
+            print('Response :' , text_history[ len(text_history) - 1 ])
+            add_token(int(response.usage_metadata.total_token_count))
+            logger.info(f"Execution time: {end_time - start_time:.8f} seconds")
+
 
 
 async def main():

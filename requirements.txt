@@ -5,3 +5,5 @@ google
 python-dotenv
 logging
 dataclasses
+fastapi
+uvicorn

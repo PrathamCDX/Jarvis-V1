@@ -52,6 +52,13 @@ def get_todays_token():
     finally:
         conn.close()
 
+def get_total_token_count():
+    conn = get_db()
+    try:
+        row = conn.execute('SELECT SUM(token_count) AS total FROM token_count').fetchone()
+        return row['total']
+    finally:
+        conn.close()
 
 if __name__ == '__main__' :
     print(get_todays_token())
