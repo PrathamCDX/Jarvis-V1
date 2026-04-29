@@ -35,7 +35,10 @@ def create_todo(title: str, description: str = '') -> dict:
             (title, description, 0)
         )
         conn.commit()
-        return {"id": cursor.lastrowid, "title": title, "description": description, "completed": False}
+        return {
+            "response_schema" : "create a JSON object with the keys : result (todo object with keys: id, title, description, completed)",
+            "result" : {"id": cursor.lastrowid, "title": title, "description": description, "completed": False}
+        }
     finally:
         conn.close()
 
@@ -46,83 +49,80 @@ def get_todo(id: int) -> dict:
         cursor = conn.execute('SELECT * FROM todos WHERE id = ?', (id,))
         row = cursor.fetchone()
         if row:
-            return {"id": row["id"], "title": row["title"], "description": row["description"], "completed": bool(row["completed"])}
-        return {"error": f"Todo with id {id} not found"}
+            return {
+                "response_schema" : "create a JSON object with the keys : result (todo object with keys: id, title, description, completed)",
+                "result" : {"id": row["id"], "title": row["title"], "description": row["description"], "completed": bool(row["completed"])}
+            }
+        raise ValueError(f"Todo with id {id} not found")
     finally:
         conn.close()
 
 @mcp.tool(description="List all todos in the database")
-def list_todos() -> list:
+def list_todos() -> dict:
     conn = get_db()
     try:
         cursor = conn.execute('SELECT id, title, description, completed FROM todos')
         rows = cursor.fetchall()
         
-        if not rows:
-            return []
-            
         res = []
         for row in rows:
-            # 2. Use string keys and append to the list
             new_data = {
                 'id': row['id'], 
                 'title': row['title'],
                 'description': row['description'],
-                'completed': bool(row['completed']) # Converts 0/1 to True/False
+                'completed': bool(row['completed'])
             }
             res.append(new_data)
-        # logger.info(res)
-        return res
+        return {
+            "response_schema" : "create a JSON object with the keys : result (list of todo objects each with keys: id, title, description, completed)",
+            "result" : res
+        }
     finally:
         conn.close()
 
 @mcp.tool(description="List all completed todos in the database")
-def list_completed_todos() -> list:
+def list_completed_todos() -> dict:
     conn = get_db()
     try:
         cursor = conn.execute('SELECT id, title, description, completed FROM todos WHERE completed = 1')
         rows = cursor.fetchall()
         
-        if not rows:
-            return []
-            
         res = []
         for row in rows:
-            # 2. Use string keys and append to the list
             new_data = {
                 'id': row['id'], 
                 'title': row['title'],
                 'description': row['description'],
-                'completed': bool(row['completed']) # Converts 0/1 to True/False
+                'completed': bool(row['completed'])
             }
             res.append(new_data)
-        # logger.info(res)
-        return res
+        return {
+            "response_schema" : "create a JSON object with the keys : result (list of todo objects each with keys: id, title, description, completed)",
+            "result" : res
+        }
     finally:
         conn.close()
 
 @mcp.tool(description="List all uncompleted todos in the database")
-def list_uncompleted_todos() -> list:
+def list_uncompleted_todos() -> dict:
     conn = get_db()
     try:
         cursor = conn.execute('SELECT id, title, description, completed FROM todos WHERE completed = 0')
         rows = cursor.fetchall()
         
-        if not rows:
-            return []
-            
         res = []
         for row in rows:
-            # 2. Use string keys and append to the list
             new_data = {
                 'id': row['id'], 
                 'title': row['title'],
                 'description': row['description'],
-                'completed': bool(row['completed']) # Converts 0/1 to True/False
+                'completed': bool(row['completed'])
             }
             res.append(new_data)
-        # logger.info(res)
-        return res
+        return {
+            "response_schema" : "create a JSON object with the keys : result (list of todo objects each with keys: id, title, description, completed)",
+            "result" : res
+        }
     finally:
         conn.close()
 
@@ -132,7 +132,7 @@ def update_todo(id: int, title: Optional[str] = None, description: Optional[str]
     try:
         cursor = conn.execute('SELECT * FROM todos WHERE id = ?', (id,))
         if not cursor.fetchone():
-            return {"error": f"Todo with id {id} not found"}
+            raise ValueError(f"Todo with id {id} not found")
         
         updates = []
         values = []
@@ -153,7 +153,10 @@ def update_todo(id: int, title: Optional[str] = None, description: Optional[str]
         
         cursor = conn.execute('SELECT * FROM todos WHERE id = ?', (id,))
         row = cursor.fetchone()
-        return {"id": row["id"], "title": row["title"], "description": row["description"], "completed": bool(row["completed"])}
+        return {
+            "response_schema" : "create a JSON object with the keys : result (todo object with keys: id, title, description, completed)",
+            "result" : {"id": row["id"], "title": row["title"], "description": row["description"], "completed": bool(row["completed"])}
+        }
     finally:
         conn.close()
 
@@ -164,8 +167,11 @@ def delete_todo(id: int) -> dict:
         cursor = conn.execute('DELETE FROM todos WHERE id = ?', (id,))
         conn.commit()
         if cursor.rowcount > 0:
-            return {"success": True, "id": id}
-        return {"error": f"Todo with id {id} not found"}
+            return {
+                "response_schema" : "create a JSON object with the keys : result (object with keys: success, id)",
+                "result" : {"success": True, "id": id}
+            }
+        raise ValueError(f"Todo with id {id} not found")
     finally:
         conn.close()
 

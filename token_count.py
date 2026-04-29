@@ -27,15 +27,7 @@ def init_tables():
         conn.close()
 
 
-@mcp.tool(description="""Add token count to today's total in the database.
-    
-    Args:
-        count: Number of tokens to add
-        
-    Returns:
-        Confirmation message with added count
-    """)
-def add_token(count: int) -> str:
+def add_token(count: int) -> dict:
     """Add token count to today's total in the database.
     
     Args:
@@ -56,14 +48,17 @@ def add_token(count: int) -> str:
         conn.commit()
     finally:
         conn.close()
-    return f"Added {count} tokens to today's count"
+    return {
+        "response_schema" : "create a JSON object with the keys : result (string confirmation message)",
+        "result" : f"Added {count} tokens to today's count"
+    }
 
 
 @mcp.tool(description="""Get the total token count for today.
     Returns:
         Number of tokens used today
     """)
-def get_todays_token() -> int:
+def get_todays_token() -> dict:
     """Get the total token count for today.
     
     Returns:
@@ -77,7 +72,10 @@ def get_todays_token() -> int:
             (today,)
         ).fetchone()
         
-        return row['token_count'] if row else 0
+        return {
+            "response_schema" : "create a JSON object with the keys : result (integer token count for today)",
+            "result" : row['token_count'] if row else 0
+        }
     finally:
         conn.close()
 
@@ -87,7 +85,7 @@ def get_todays_token() -> int:
     Returns:
         Total number of tokens used
     """)
-def get_total_token_count() -> int:
+def get_total_token_count() -> dict:
     """Get the total token count across all days.
     
     Returns:
@@ -96,7 +94,10 @@ def get_total_token_count() -> int:
     conn = get_db()
     try:
         row = conn.execute('SELECT SUM(token_count) AS total FROM token_count').fetchone()
-        return row['total'] if row['total'] else 0
+        return {
+            "response_schema" : "create a JSON object with the keys : result (integer total token count across all days)",
+            "result" : row['total'] if row['total'] else 0
+        }
     finally:
         conn.close()
 

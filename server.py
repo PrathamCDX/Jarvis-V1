@@ -33,7 +33,12 @@ async def handle_mcp_query(request: Request):
 
     try:
         result = await run_agent_v2(user_query)
-        return {"response": result}
+        return {
+            "success" : True,
+            "message" : "Query handle successful",
+            "data" : result ,
+            "error" : False
+        }
     except* ValueError as eg:
         for e in eg.exceptions:
             server_logger.error(f"Validation error in task: {e}")

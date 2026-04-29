@@ -11,6 +11,7 @@ from logging_system import logger
 from config import server_names
 from token_count import add_token
 import random
+import json
 # from functionHistoryClass import FunctionHistoryType
 
 
@@ -24,6 +25,23 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 #     # args=['todo_server.py']
 #     args = [ 'calculator_server.py', 'todo_server.py']
 # )
+
+RESPONSE_PROMT = """
+Role: You are a high-precision JSON serialization engine.
+Task: Convert the provided function_response into a JSON string using the exact keys defined in response_schema.
+
+Strict Requirements:
+
+Output Format: Return ONLY a raw, valid JSON string.
+
+No Markdown: Do NOT use code blocks (e.g., ```json), bolding, or headers.
+
+No Prose: Do NOT include introductory text, explanations, or "Here is your JSON" style sentences.
+
+Schema Compliance: Use the required keys from response_schema strictly. Do not add or omit keys.
+
+JSON Integrity: Ensure all strings are double-quoted and special characters are properly escaped.
+"""
 
 SYSTEM_PROMT = """
 You are a personal assistant.
@@ -159,8 +177,44 @@ async def run_agent_v2(query: str):
         else:
             # No more tools called; we are done
             break
+
+    logger.info(text_history)
+    logger.info(function_history)
+    logger.info(text_history[-1] )
+
+    final_response = client.models.generate_content(
+        model="gemma-4-26b-a4b-it",
+        contents=[
+            types.Content(role="user", parts=[
+                types.Part.from_text(text=f" {RESPONSE_PROMT} function_response: {function_history[-1]["function_response"]} "),
+                # types.Part.from_text(text=f"")
+            ])
+        ],
+        config=types.GenerateContentConfig(tools=all_mcp_tools)
+    )
+    add_token(int(final_response.usage_metadata.total_token_count))
+
+    json_text = (final_response.candidates[0].content.parts[-1].text)
+    logger.info(json_text)
+    final_json_response = parse_json_from_text(json_text)
+    final_json_response["remarks"] = text_history[-1] if text_history else "No response generated."
+    logger.info(final_json_response)
+    return final_json_response
+
+
+def parse_json_from_text(input_string):
+    start_index = input_string.find('{')
+    end_index = input_string.rfind('}')
     
-    return text_history[-1] if text_history else "No response generated."
+    if start_index == -1 or end_index == -1 or end_index < start_index:
+        return None
+        
+    json_content = input_string[start_index : end_index + 1]
+    
+    try:
+        return json.loads(json_content)
+    except json.JSONDecodeError:
+        return None
 
 async def run_agent(query: str):
     async with AsyncExitStack() as stack:
