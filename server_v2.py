@@ -1,47 +1,40 @@
 from fastapi import FastAPI, Request, HTTPException
 import uvicorn
-from client import run_agent_v2, global_async_stack, connect_all_servers
+from langchain_agent.agent import run_langchain_agent, init_all_tables
 from logging_system import server_logger
-from contextlib import asynccontextmanager
-from config import server_names
 from dotenv import load_dotenv
 import os
 
 load_dotenv()
 PORT_NUMBER = os.getenv('PORT_NUMBER')
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await connect_all_servers(server_list=server_names, connected_servers=0)
-    yield
-    server_logger.info('Cleanig all MCP servers in async stack ')
-    await global_async_stack.aclose()
+init_all_tables()
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 @app.get('/ping')
 async def handle_ping():
     try:
-        result = 'pong1'
+        result = 'pong2.1'
         return {"response": result}
     except Exception as e:
         return {"error": str(e)}, 500
 
 @app.post("/query")
-async def handle_mcp_query(request: Request):
+async def handle_query(request: Request):
     data = await request.json()
-    
+
     user_query = data.get("query")
     if not user_query:
         raise HTTPException(status_code=400, detail="Missing 'query' in request body")
 
     try:
-        result = await run_agent_v2(user_query)
+        result = await run_langchain_agent(user_query)
         return {
-            "success" : True,
-            "message" : "Query handle successful",
-            "data" : result ,
-            "error" : False
+            "success": True,
+            "message": "Query handled successfully",
+            "data": result,
+            "error": False
         }
     except* ValueError as eg:
         for e in eg.exceptions:
@@ -49,21 +42,19 @@ async def handle_mcp_query(request: Request):
         raise HTTPException(status_code=400, detail="Invalid data in sub-task")
 
     except* Exception as eg:
-        # This catches all other errors bundled in the ExceptionGroup
         for e in eg.exceptions:
             server_logger.exception(f"Sub-task failed: {e}")
         raise HTTPException(status_code=500, detail="Internal task group failure")
 
 @app.get('/version')
-async def v2():
+async def version():
     return {
-            "success" : True,
-            "message" : "Version fetch successfull",
-            "data" : "V1" ,
-            "error" : False
-        }
-
+        "success": True,
+        "message": "Version fetch successful",
+        "data": "V2",
+        "error": False
+    }
 
 if __name__ == "__main__":
-    print('POrt_number', PORT_NUMBER)
-    uvicorn.run(app, host="0.0.0.0", port= int(PORT_NUMBER))
+    print('Port_number', PORT_NUMBER)
+    uvicorn.run(app, host="0.0.0.0", port=int(PORT_NUMBER))
