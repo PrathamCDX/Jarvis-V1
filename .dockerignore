@@ -1,0 +1,13 @@
+# Ignore the git folder
+.git
+.gitignore
+
+# Ignore Python cache
+__pycache__/
+*.py[cod]
+
+# Ignore your local logs (crucial for your PermissionError fix)
+logs/
+
+# Ignore environment secrets
+venv/

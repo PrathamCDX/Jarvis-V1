@@ -19,6 +19,7 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY)
+MODEL_NAME = "gemma-4-26b-a4b-it"
 
 # server_params = StdioServerParameters(
 #     command='python',
@@ -131,7 +132,7 @@ async def run_agent_v2(query: str):
     # 2. Initial Model Call
     # We wrap the core logic in a way that handles the first call and tool loops
     response = client.models.generate_content(
-        model="gemma-4-26b-a4b-it",
+        model=MODEL_NAME,
         contents=[
             types.Content(role="user", parts=[
                 types.Part.from_text(text=f" {SYSTEM_PROMT} prompt_unique_id = {prompt_unique_id}, task: {query} "),
@@ -140,6 +141,7 @@ async def run_agent_v2(query: str):
         ],
         config=types.GenerateContentConfig(tools=all_mcp_tools)
     )
+    add_token(int(response.usage_metadata.total_token_count))
 
     # 3. The Chaining Loop
     # We loop as long as the model wants to call tools
@@ -182,7 +184,7 @@ async def run_agent_v2(query: str):
         if tool_called_this_turn:
             chaining += 1
             response = client.models.generate_content(
-                model="gemma-4-26b-a4b-it",
+                model=MODEL_NAME,
                 contents=[
                     types.Content(role="user", parts=[
                         types.Part.from_text(text=f" {query} prompt_unique_id = {prompt_unique_id} "),
@@ -202,22 +204,24 @@ async def run_agent_v2(query: str):
     logger.info(text_history[-1] )
 
     final_response = client.models.generate_content(
-        model="gemma-4-26b-a4b-it",
+        model=MODEL_NAME,
         contents=[
             types.Content(role="user", parts=[
-                types.Part.from_text(text=f" {RESPONSE_PROMT} function_response: {function_history[-1]["function_response"]} "),
-                # types.Part.from_text(text=f"")
+                types.Part.from_text(text=f"{RESPONSE_PROMT} function_response: {function_history[-1]['function_response'] if function_history else 'No function called yet'}")
+# types.Part.from_text(text=f"")
             ])
         ],
         config=types.GenerateContentConfig(tools=all_mcp_tools)
     )
     add_token(int(final_response.usage_metadata.total_token_count))
-
+    start_time = time.perf_counter()
     json_text = (final_response.candidates[0].content.parts[-1].text)
     logger.info(json_text)
     final_json_response = parse_json_from_text(json_text)
     final_json_response["remarks"] = text_history[-1] if text_history else "No response generated."
     logger.info(final_json_response)
+    end_time = time.perf_counter()
+    logger.info(f"Execution time: {end_time - start_time:.8f} seconds")
     return final_json_response
 
 
@@ -253,7 +257,7 @@ async def run_agent(query: str):
             # This call will fail if 'session' is passed directly as a tool
             # You must pass Gemini-compatible function declarations.
             response = client.models.generate_content(
-                model="gemma-4-26b-a4b-it",
+                model=MODEL_NAME,
                 contents=[
                     types.Content(role="User", parts = [
                         types.Part.from_text(text=SYSTEM_PROMT + f' . prompt_unique_id = {prompt_unique_id} . '+ prompt),
@@ -299,7 +303,7 @@ async def run_agent(query: str):
                                     function_history.append(current_function_data)
 
                                     response = client.models.generate_content(
-                                        model="gemma-4-26b-a4b-it",
+                                        model=MODEL_NAME,
                                         contents=[
                                             types.Content(role="User", parts = [
                                                 types.Part.from_text(text= prompt + f' . prompt_unique_id = {prompt_unique_id} . '),
@@ -351,7 +355,7 @@ async def main():
             # This call will fail if 'session' is passed directly as a tool
             # You must pass Gemini-compatible function declarations.
             response = client.models.generate_content(
-                model="gemma-4-26b-a4b-it",
+                model=MODEL_NAME,
                 contents=[
                     types.Content(role="User", parts = [
                         types.Part.from_text(text=SYSTEM_PROMT + f' . prompt_unique_id = {prompt_unique_id} . '+ prompt),
@@ -397,7 +401,7 @@ async def main():
                                     function_history.append(current_function_data)
 
                                     response = client.models.generate_content(
-                                        model="gemma-4-26b-a4b-it",
+                                        model=MODEL_NAME,
                                         contents=[
                                             types.Content(role="User", parts = [
                                                 types.Part.from_text(text= prompt + f' . prompt_unique_id = {prompt_unique_id} . '),

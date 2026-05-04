@@ -4,7 +4,11 @@ from client import run_agent_v2, global_async_stack, connect_all_servers
 from logging_system import server_logger
 from contextlib import asynccontextmanager
 from config import server_names
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
+PORT_NUMBER = os.getenv('PORT_NUMBER')
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -52,4 +56,5 @@ async def handle_mcp_query(request: Request):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    print('POrt_number', PORT_NUMBER)
+    uvicorn.run(app, host="0.0.0.0", port= int(PORT_NUMBER))
