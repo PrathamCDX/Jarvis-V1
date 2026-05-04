@@ -22,7 +22,7 @@ app = FastAPI(lifespan=lifespan)
 @app.get('/ping')
 async def handle_ping():
     try:
-        result = 'pong'
+        result = 'pong2.1'
         return {"response": result}
     except Exception as e:
         return {"error": str(e)}, 500
@@ -53,6 +53,15 @@ async def handle_mcp_query(request: Request):
         for e in eg.exceptions:
             server_logger.exception(f"Sub-task failed: {e}")
         raise HTTPException(status_code=500, detail="Internal task group failure")
+
+@app.get('/version')
+async def v2():
+    return {
+            "success" : True,
+            "message" : "Versipn fetch successfull",
+            "data" : "V2" ,
+            "error" : False
+        }
 
 
 if __name__ == "__main__":

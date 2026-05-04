@@ -91,10 +91,12 @@ async def connect_all_servers(server_list: list[str], connected_servers: int):
     #     return None
     for server in server_list:
         print(server)
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         server_params = StdioServerParameters(
             command='python',
-            # args=['todo_server.py']
-            args = [server] 
+            args = [server],
+            cwd=project_root,
+            env={**os.environ, 'PYTHONPATH': project_root}
         )
 
         stdio_transport = await global_async_stack.enter_async_context(stdio_client(server_params))
