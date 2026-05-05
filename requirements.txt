@@ -11,3 +11,6 @@ langchain
 langchain-core
 langchain-google-genai
 langchain-mcp-adapters
+psycopg[binary,pool]
+psycopg2-binary
+asyncpg

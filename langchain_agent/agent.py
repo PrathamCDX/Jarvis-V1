@@ -1,3 +1,4 @@
+from token_count import add_token
 import time
 import random
 import json
@@ -7,10 +8,9 @@ from langchain.agents import create_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from logging_system import logger
-from token_count import add_token as add_token_count
 from langchain_agent.tools.calculator_tools import calculator_tools
-from langchain_agent.tools.todo_tools import todo_tools, init_tables as init_todo_tables
-from langchain_agent.tools.token_tools import token_tools, init_tables as init_token_tables
+from langchain_agent.tools.pgsql.todo_tools import todo_tools, init_tables as init_todo_tables
+from langchain_agent.tools.pgsql.token_tools import token_tools, init_tables as init_token_tables
 
 load_dotenv()
 
@@ -103,14 +103,6 @@ def _extract_function_history_full(messages):
     return function_history
 
 
-def _sum_token_usage(messages):
-    total = 0
-    for msg in messages:
-        if isinstance(msg, AIMessage) and msg.usage_metadata:
-            total += msg.usage_metadata.get("total_token_count", 0) or 0
-    return total
-
-
 def _parse_tool_result(raw_result):
     try:
         parsed = json.loads(raw_result)
@@ -141,9 +133,12 @@ async def run_langchain_agent(query: str):
     new_messages = all_messages[prev_msg_count:]
     agent_messages.extend(new_messages)
 
-    total_tokens = _sum_token_usage(new_messages)
-    if total_tokens > 0:
-        add_token_count(total_tokens)
+    for msg in new_messages:
+        if isinstance(msg, AIMessage) and msg.usage_metadata:
+            tokens = msg.usage_metadata.get("total_tokens", 0) or 0
+            print(f"tokens per message : {tokens}")
+            if tokens > 0:
+                add_token(tokens)
 
     text_history = _extract_text_history(all_messages)
     function_history = _extract_function_history_full(all_messages)

@@ -67,3 +67,5 @@ Thumbs.db
 # Database
 *.db
 *.sqlite
+
+data.txt
