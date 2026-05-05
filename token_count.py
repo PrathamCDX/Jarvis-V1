@@ -3,7 +3,6 @@ from datetime import date
 
 
 def add_token(count: int):
-    print('Called add token')
     today = date.today().isoformat()
     conn = get_connection()
     try:

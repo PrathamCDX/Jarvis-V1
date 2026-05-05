@@ -1,3 +1,4 @@
+from tokenBucket import TokenBucketMiddleware
 from fastapi import FastAPI, Request, HTTPException
 import uvicorn
 from langchain_agent.agent import run_langchain_agent, init_all_tables
@@ -13,6 +14,9 @@ init_all_tables()
 # docker check 
 
 app = FastAPI()
+
+# rate = RPS , max burst = capacity, refil per min = 7
+app.add_middleware(TokenBucketMiddleware, rate=0.13, capacity=10)
 
 @app.get('/ping')
 async def handle_ping():
