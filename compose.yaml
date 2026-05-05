@@ -24,6 +24,7 @@ services:
             - venv/
             - __pycache__/
             - .git/
+            - logs
         - action: rebuild
           path: Dockerfile
         - action: rebuild
