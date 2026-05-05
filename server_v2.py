@@ -10,12 +10,14 @@ PORT_NUMBER = os.getenv('PORT_NUMBER')
 
 init_all_tables()
 
+# docker check 
+
 app = FastAPI()
 
 @app.get('/ping')
 async def handle_ping():
     try:
-        result = 'pong2.1'
+        result = 'pong2.2'
         return {"response": result}
     except Exception as e:
         return {"error": str(e)}, 500

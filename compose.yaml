@@ -8,26 +8,41 @@ services:
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - PORT_NUMBER=${PORT_NUMBER}
-      - DB_HOST=${DB_HOST_PROD}
+      - DB_HOST=${DB_HOST_INTERNAL}
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_PORT=${DB_PORT}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    develop:
+      watch:
+        - action: sync+restart
+          path: .
+          target: /app
+          ignore:
+            - venv/
+            - __pycache__/
+            - .git/
+        - action: rebuild
+          path: Dockerfile
+        - action: rebuild
+          path: requirements.txt
+        - action: rebuild
+          path: .env
 
-#   db:
-#     image: postgres:18.3
-#     container_name: postgres_v18
-#     environment:
-#       - POSTGRES_USER=myuser
-#       - POSTGRES_PASSWORD=mypassword
-#       - POSTGRES_DB=myapp_db
-#     ports:
-#       - "5433:5432"
-#     volumes:
-#       - pgdata:/var/lib/postgresql
+  db:
+    image: postgres:18.3
+    container_name: postgres_v18
+    environment:
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=myapp_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
 
-# volumes:
-#   pgdata:
-#     external: true
+volumes:
+  pgdata:
+    external: true
