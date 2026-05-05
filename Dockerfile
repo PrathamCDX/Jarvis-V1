@@ -15,6 +15,6 @@ RUN useradd -m app && \
 COPY --chown=app:app . .
 
 USER app
-EXPOSE 8900
+EXPOSE 8000
 
-CMD ["python3", "server.py"]
+CMD ["python3", "server_v2.py"]

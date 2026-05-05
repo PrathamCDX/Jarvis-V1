@@ -11,3 +11,5 @@ logs/
 
 # Ignore environment secrets
 venv/
+
+.env
