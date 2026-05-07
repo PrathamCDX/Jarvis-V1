@@ -1,19 +1,21 @@
-from tokenBucketValkey import TokenBucketValkeyMiddleware
 from langchain_agent.agent import run_langchain_agent_v2
-# from tokenBucket import TokenBucketMiddleware
-from fastapi import FastAPI, Request, HTTPException
+from tokenBucketValkey import create_rate_limit_dependency, get_limiter
+from fastapi import FastAPI, Request, HTTPException, Depends
 from contextlib import asynccontextmanager
 import uvicorn
 from logging_system import server_logger
+from starlette.responses import JSONResponse
 from dotenv import load_dotenv
 from valkey_conn import close_valkey, get_valkey, ping_valkey
 import os
 
 load_dotenv()
-PORT_NUMBER = os.getenv('PORT_NUMBER')
+PORT_NUMBER = os.getenv('PORT_NUMBER') or 8000
 DB_ENV = os.getenv('DB_ENV')
 
-rate= 1 if DB_ENV == 'dev' else 0.13
+# rate = 1 if DB_ENV == 'dev' else 0.13
+
+llm_rate_limit = create_rate_limit_dependency("llm", rate=0.13, capacity=10)
 
 @asynccontextmanager
 async def lifespan(app):
@@ -24,8 +26,14 @@ async def lifespan(app):
 
 app = FastAPI(lifespan=lifespan)
 
-# rate = RPS , max burst = capacity, refil per min = 7
-app.add_middleware(TokenBucketValkeyMiddleware, rate = rate, capacity=10)
+@app.middleware("http")
+async def global_rate_limit(request: Request, call_next):
+    limiter = get_limiter("global", rate=0.3, capacity=20)
+    if not await limiter.consume_token():
+        return JSONResponse(status_code=429, content={"detail": "Too many requests. Slow down!"})
+    return await call_next(request)
+
+
 
 @app.get('/ping')
 async def handle_ping():
@@ -35,7 +43,7 @@ async def handle_ping():
     except Exception as e:
         return {"error": str(e)}, 500
 
-@app.post("/query")
+@app.post("/query", dependencies=[Depends(llm_rate_limit)])
 async def handle_query(request: Request):
     data = await request.json()
 
@@ -61,7 +69,7 @@ async def handle_query(request: Request):
             server_logger.exception(f"Sub-task failed: {e}")
         raise HTTPException(status_code=500, detail="Internal task group failure")
 
-@app.get('/version')
+@app.get('/version', dependencies=[Depends(llm_rate_limit)])
 async def version():
     return {
         "success": True,
