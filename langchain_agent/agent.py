@@ -1,3 +1,8 @@
+from typing import Annotated, TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langgraph.prebuilt import ToolNode
 from token_count import add_token
 import time
 import random
@@ -6,7 +11,6 @@ import os
 from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from logging_system import logger
 from langchain_agent.tools.calculator_tools import calculator_tools
 from langchain_agent.tools.pgsql.todo_tools import todo_tools, init_tables as init_todo_tables
@@ -49,6 +53,8 @@ If data is missing to complete a task, request it from the user instead of guess
 llm = ChatGoogleGenerativeAI(model=MODEL_NAME, api_key=GEMINI_API_KEY)
 
 all_tools = calculator_tools + todo_tools + token_tools
+
+llm_with_tools = llm.bind_tools(all_tools)
 
 agent = create_agent(
     llm,
@@ -163,6 +169,112 @@ async def run_langchain_agent(query: str):
     }
 
 
-def init_all_tables():
-    init_todo_tables()
-    init_token_tables()
+class AgentState(TypedDict):
+    messages: Annotated[list, add_messages]
+
+
+v2_agent_messages = []
+
+
+def _v2_call_model_node(state: AgentState):
+    system_msg = SystemMessage(content=SYSTEM_PROMPT)
+    all_messages = [system_msg] + state["messages"]
+    response = llm_with_tools.invoke(all_messages)
+
+    if response.usage_metadata:
+        tokens = response.usage_metadata.get("total_tokens", 0) or 0
+        print(f"v2 tokens per message : {tokens}")
+        if tokens > 0:
+            add_token(tokens)
+
+    return {"messages": [response]}
+
+
+def _v2_exec_tools_node(state: AgentState):
+    messages = state["messages"]
+    last_msg = messages[-1]
+
+    if not isinstance(last_msg, AIMessage) or not last_msg.tool_calls:
+        return {"messages": []}
+
+    tool_node = ToolNode(all_tools)
+    return tool_node.invoke({"messages": messages})
+
+
+def _v2_should_call(state: AgentState):
+    messages = state["messages"]
+    if not messages:
+        return END
+    last_msg = messages[-1]
+    if isinstance(last_msg, AIMessage) and last_msg.tool_calls:
+        return "tools"
+    return END
+
+
+def _build_v2_agent_graph():
+    graph = StateGraph(AgentState)
+    graph.add_node("call_model", _v2_call_model_node)
+    graph.add_node("exec_tools", _v2_exec_tools_node)
+    graph.add_edge(START, "call_model")
+    graph.add_conditional_edges(
+        "call_model",
+        _v2_should_call,
+        {"tools": "exec_tools", END: END},
+    )
+    graph.add_edge("exec_tools", "call_model")
+    return graph.compile()
+
+
+v2_agent = _build_v2_agent_graph()
+
+
+async def run_langchain_agent_v2(query: str):
+    logger.info(f'Running langchain agent v2 with query: {query}')
+
+    prompt_unique_id = time.time_ns() + random.randint(1637, 98479)
+    formatted_query = f"prompt_unique_id = {prompt_unique_id}, task: {query}"
+
+    prev_msg_count = len(v2_agent_messages)
+
+    input_messages = v2_agent_messages + [HumanMessage(content=formatted_query)]
+
+    final_messages = None
+
+    async for chunk in v2_agent.astream(
+        {"messages": input_messages},
+        stream_mode="values",
+    ):
+        final_messages = chunk.get("messages", [])
+        if final_messages:
+            last = final_messages[-1]
+            if isinstance(last, AIMessage) and last.tool_calls:
+                for tc in last.tool_calls:
+                    logger.info(f"v2 tool calling: {tc['name']}({tc['args']})")
+            elif last.__class__.__name__ == 'ToolMessage' and last.content:
+                logger.info(f"v2 tool result: {getattr(last, 'name', '?')} = {last.content}")
+
+    if final_messages is None:
+        final_messages = input_messages
+
+    new_messages = final_messages[prev_msg_count:]
+    v2_agent_messages.extend(new_messages)
+
+    text_history = _extract_text_history(final_messages)
+    function_history = _extract_function_history_full(final_messages)
+    last_tool_result = _extract_last_tool_result(new_messages)
+
+    if last_tool_result:
+        final_result = _parse_tool_result(last_tool_result)
+    else:
+        final_text = text_history[-1] if text_history else "No response generated."
+        final_result = _parse_tool_result(final_text)
+
+    remarks = text_history[-1] if text_history else "No response generated."
+
+    logger.info(f"v2 Function history: {function_history}")
+    logger.info(f"v2 Text history: {text_history}")
+    logger.info(f"v2 Final response: result={final_result}, remarks={remarks}")
+    return {
+        "result": final_result,
+        "remarks": remarks
+    }

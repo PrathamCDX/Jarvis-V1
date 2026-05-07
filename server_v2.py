@@ -1,22 +1,31 @@
-from tokenBucket import TokenBucketMiddleware
+from tokenBucketValkey import TokenBucketValkeyMiddleware
+from langchain_agent.agent import run_langchain_agent_v2
+# from tokenBucket import TokenBucketMiddleware
 from fastapi import FastAPI, Request, HTTPException
+from contextlib import asynccontextmanager
 import uvicorn
-from langchain_agent.agent import run_langchain_agent, init_all_tables
 from logging_system import server_logger
 from dotenv import load_dotenv
+from valkey_conn import close_valkey, get_valkey, ping_valkey
 import os
 
 load_dotenv()
 PORT_NUMBER = os.getenv('PORT_NUMBER')
+DB_ENV = os.getenv('DB_ENV')
 
-init_all_tables()
+rate= 1 if DB_ENV == 'dev' else 0.13
 
-# docker check 
+@asynccontextmanager
+async def lifespan(app):
+    await get_valkey()
+    await ping_valkey()
+    yield
+    await close_valkey()
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 # rate = RPS , max burst = capacity, refil per min = 7
-app.add_middleware(TokenBucketMiddleware, rate=0.13, capacity=10)
+app.add_middleware(TokenBucketValkeyMiddleware, rate = rate, capacity=10)
 
 @app.get('/ping')
 async def handle_ping():
@@ -35,7 +44,7 @@ async def handle_query(request: Request):
         raise HTTPException(status_code=400, detail="Missing 'query' in request body")
 
     try:
-        result = await run_langchain_agent(user_query)
+        result = await run_langchain_agent_v2(user_query)
         return {
             "success": True,
             "message": "Query handled successfully",
@@ -58,6 +67,15 @@ async def version():
         "success": True,
         "message": "Version fetch successful",
         "data": "V2",
+        "error": False
+    }
+
+@app.get('/debug/env')
+async def debug_env():
+    return {
+        "success": True,
+        "message": "Environment fetched successfully",
+        "data": DB_ENV,
         "error": False
     }
 

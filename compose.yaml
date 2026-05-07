@@ -1,5 +1,8 @@
 services:
   backend:
+    depends_on:
+      - db
+      - valkey
     build:
       context: .
       dockerfile: Dockerfile
@@ -13,6 +16,10 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_PORT=${DB_PORT}
+      - VALKEY_HOST=valkey
+      - VALKEY_PORT=${VALKEY_PORT}
+      - VALKEY_PASSWORD=${VALKEY_PASSWORD}
+      - DB_ENV=prod
     extra_hosts:
       - "host.docker.internal:host-gateway"
     develop:
@@ -36,14 +43,25 @@ services:
     image: postgres:18.3
     container_name: postgres_v18
     environment:
-      - POSTGRES_USER=myuser
-      - POSTGRES_PASSWORD=mypassword
-      - POSTGRES_DB=myapp_db
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
 
+  valkey:
+    image: valkey/valkey:9.0
+    container_name: valkey
+    command: valkey-server --requirepass ${VALKEY_PASSWORD} --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkeydata:/data
+
 volumes:
   pgdata:
+    external: true
+  valkeydata:
     external: true

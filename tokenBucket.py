@@ -10,10 +10,9 @@ class TokenBucketMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.rate = rate
         self.capacity = capacity
-        self.buckets = {}
+        self.tokens = self.capacity
         self.lock = asyncio.Lock()
         self.last_updated = time.time()
-        self.tokens = 0
 
     async def dispatch(self, request: Request, call_next):
         
