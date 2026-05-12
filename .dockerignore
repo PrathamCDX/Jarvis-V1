@@ -11,5 +11,10 @@ logs/
 
 # Ignore environment secrets
 venv/
+.venv/
+
 
 .env
+data.json
+train.json
+train.jsonl

@@ -1,3 +1,4 @@
+# from script import init_all_tables
 from langchain_agent.agent import run_langchain_agent_v2
 from tokenBucketValkey import create_rate_limit_dependency, get_limiter
 from fastapi import FastAPI, Request, HTTPException, Depends
@@ -19,6 +20,7 @@ llm_rate_limit = create_rate_limit_dependency("llm", rate=0.13, capacity=10)
 
 @asynccontextmanager
 async def lifespan(app):
+    # init_all_tables()
     await get_valkey()
     await ping_valkey()
     yield

@@ -4,7 +4,6 @@ import redis.asyncio as redis
 _client = None
 
 async def get_valkey():
-    print("called get valkey ")
     global _client
     if _client is None:
         _client = redis.Redis(

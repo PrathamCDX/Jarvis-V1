@@ -1,3 +1,5 @@
+from datetime import datetime
+from langchain_agent.tools.webSearch_tool import web_search_tools
 from typing import Annotated, TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
@@ -52,7 +54,7 @@ If data is missing to complete a task, request it from the user instead of guess
 
 llm = ChatGoogleGenerativeAI(model=MODEL_NAME, api_key=GEMINI_API_KEY)
 
-all_tools = calculator_tools + todo_tools + token_tools
+all_tools = calculator_tools + todo_tools + token_tools + web_search_tools
 
 llm_with_tools = llm.bind_tools(all_tools)
 
@@ -177,6 +179,8 @@ v2_agent_messages = []
 
 
 def _v2_call_model_node(state: AgentState):
+    current_time = datetime.now().strftime("%H:%M:%S.%f")
+    print("V2 model node : ", current_time)
     system_msg = SystemMessage(content=SYSTEM_PROMPT)
     all_messages = [system_msg] + state["messages"]
     response = llm_with_tools.invoke(all_messages)
@@ -191,6 +195,8 @@ def _v2_call_model_node(state: AgentState):
 
 
 def _v2_exec_tools_node(state: AgentState):
+    current_time = datetime.now().strftime("%H:%M:%S.%f")
+    print("V2 tool node : ", current_time)
     messages = state["messages"]
     last_msg = messages[-1]
 
@@ -202,6 +208,8 @@ def _v2_exec_tools_node(state: AgentState):
 
 
 def _v2_should_call(state: AgentState):
+    current_time = datetime.now().strftime("%H:%M:%S.%f")
+    print("V2 conditional : ", current_time)
     messages = state["messages"]
     if not messages:
         return END
